@@ -9,29 +9,83 @@ export default function App() {
   const [visibleCount, setVisibleCount] = useState(10);
   const [selectedTrade, setSelectedTrade] = useState("");
   const [timeRange, setTimeRange] = useState("all");
+  const [isAddingTrade, setIsAddingTrade] = useState(false);
+  const [isEditingTrade, setIsEditingTrade] = useState(false);
+  const [editingTradeId, setEditingTradeId] = useState(null);
+  const [newTrade, setNewTrade] = useState({
+    date: new Date().toISOString().split('T')[0],
+    trade_code: "",
+    high: 0,
+    low: 0,
+    open: 0,
+    close: 0,
+    volume: "0"
+  });
+
+  const parseVolume = (volumeStr) => {
+    if (typeof volumeStr === 'number') return volumeStr;
+    return parseInt(volumeStr.replace(/,/g, '')) || 0;
+  };
+
+  const formatVolume = (volume) => {
+    if (typeof volume === 'string' && volume.includes(',')) return volume;
+    return volume.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  };
 
   useEffect(() => {
     const deleted = JSON.parse(localStorage.getItem("deletedTrades")) || [];
     setDeletedTrades(deleted);
-    setIsLoading(true);
 
-    fetch("/data.json")
-      .then((res) => res.json())
-      .then((data) => {
-        const filteredTrades = data.filter(
-          (trade) =>
-            !deleted.some(
-              (del) => del.date === trade.date && del.trade_code === trade.trade_code
-            )
-        );
-        setAllTrades(filteredTrades);
-        setTrades(filteredTrades.slice(0, visibleCount));
-        setIsLoading(false);
 
-        if (filteredTrades.length > 0) {
-          setSelectedTrade(filteredTrades[0].trade_code);
-        }
-      });
+    const savedTrades = JSON.parse(localStorage.getItem("savedTrades")) || [];
+
+    if (savedTrades.length > 0) {
+      const filteredTrades = savedTrades.filter(
+        (trade) =>
+          !deleted.some(
+            (del) => del.date === trade.date && del.trade_code === trade.trade_code
+          )
+      );
+      setAllTrades(filteredTrades);
+      setTrades(filteredTrades.slice(0, visibleCount));
+      setIsLoading(false);
+
+      if (filteredTrades.length > 0) {
+        setSelectedTrade(filteredTrades[0].trade_code);
+      }
+    } else {
+      setIsLoading(true);
+      fetch("/data.json")
+        .then((res) => res.json())
+        .then((data) => {
+          const processedData = data.map(trade => ({
+            ...trade,
+            volume: typeof trade.volume === 'number' ?
+              formatVolume(trade.volume) :
+              trade.volume
+          }));
+
+          const filteredTrades = processedData.filter(
+            (trade) =>
+              !deleted.some(
+                (del) => del.date === trade.date && del.trade_code === trade.trade_code
+              )
+          );
+          setAllTrades(filteredTrades);
+          setTrades(filteredTrades.slice(0, visibleCount));
+          setIsLoading(false);
+
+          localStorage.setItem("savedTrades", JSON.stringify(filteredTrades));
+
+          if (filteredTrades.length > 0) {
+            setSelectedTrade(filteredTrades[0].trade_code);
+          }
+        })
+        .catch(error => {
+          console.error("Error loading data:", error);
+          setIsLoading(false);
+        });
+    }
   }, []);
 
   const handleLoadMore = () => {
@@ -50,6 +104,8 @@ export default function App() {
     );
     setAllTrades(updatedTrades);
     setTrades(updatedTrades.slice(0, visibleCount));
+
+    localStorage.setItem("savedTrades", JSON.stringify(updatedTrades));
   };
 
   const handleReset = () => {
@@ -58,16 +114,125 @@ export default function App() {
     fetch("/data.json")
       .then((res) => res.json())
       .then((data) => {
-        setAllTrades(data);
-        setTrades(data.slice(0, 10));
+        const processedData = data.map(trade => ({
+          ...trade,
+          volume: typeof trade.volume === 'number' ?
+            formatVolume(trade.volume) :
+            trade.volume
+        }));
+
+        setAllTrades(processedData);
+        setTrades(processedData.slice(0, 10));
         setVisibleCount(10);
-        if (data.length > 0) setSelectedTrade(data[0].trade_code);
+        localStorage.setItem("savedTrades", JSON.stringify(processedData));
+        if (processedData.length > 0) setSelectedTrade(processedData[0].trade_code);
       });
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+
+    if (["high", "low", "open", "close"].includes(name)) {
+      setNewTrade({ ...newTrade, [name]: parseFloat(value) || 0 });
+    } else if (name === "volume") {
+      const rawValue = value.replace(/,/g, '');
+      if (/^\d*$/.test(rawValue)) {
+        const formattedValue = formatVolume(rawValue);
+        setNewTrade({ ...newTrade, volume: formattedValue });
+      }
+    } else {
+      setNewTrade({ ...newTrade, [name]: value });
+    }
+  };
+
+  const handleAddTrade = () => {
+    if (!newTrade.trade_code || !newTrade.date) {
+      alert("Trade code and date are required!");
+      return;
+    }
+
+    const tradeToAdd = {
+      ...newTrade,
+      volume: newTrade.volume
+    };
+
+    const updatedTrades = [tradeToAdd, ...allTrades];
+
+    setAllTrades(updatedTrades);
+    setTrades(updatedTrades.slice(0, visibleCount));
+    localStorage.setItem("savedTrades", JSON.stringify(updatedTrades));
+
+    if (!selectedTrade) {
+      setSelectedTrade(tradeToAdd.trade_code);
+    }
+
+    setNewTrade({
+      date: new Date().toISOString().split('T')[0],
+      trade_code: "",
+      high: 0,
+      low: 0,
+      open: 0,
+      close: 0,
+      volume: "0"
+    });
+
+    setIsAddingTrade(false);
+  };
+
+  const handleEditTrade = (trade) => {
+    setNewTrade({
+      date: trade.date,
+      trade_code: trade.trade_code,
+      high: trade.high,
+      low: trade.low,
+      open: trade.open,
+      close: trade.close,
+      volume: trade.volume
+    });
+    setEditingTradeId({ date: trade.date, trade_code: trade.trade_code });
+    setIsEditingTrade(true);
+  };
+
+  const handleUpdateTrade = () => {
+    const tradeIndex = allTrades.findIndex(
+      trade =>
+        trade.date === editingTradeId.date &&
+        trade.trade_code === editingTradeId.trade_code
+    );
+
+    if (tradeIndex === -1) {
+      alert("Trade not found!");
+      return;
+    }
+
+    const updatedTrades = [...allTrades];
+    updatedTrades[tradeIndex] = { ...newTrade };
+
+    setAllTrades(updatedTrades);
+    setTrades(updatedTrades.slice(0, visibleCount));
+    localStorage.setItem("savedTrades", JSON.stringify(updatedTrades));
+
+    setNewTrade({
+      date: new Date().toISOString().split('T')[0],
+      trade_code: "",
+      high: 0,
+      low: 0,
+      open: 0,
+      close: 0,
+      volume: "0"
+    });
+
+    setIsEditingTrade(false);
+    setEditingTradeId(null);
   };
 
   const chartData = allTrades
     .filter((trade) => trade.trade_code === selectedTrade)
-    .sort((a, b) => new Date(a.date) - new Date(b.date));
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .map(trade => ({
+      ...trade,
+      volume: parseVolume(trade.volume)
+    }));
 
   const filteredChartData = (() => {
     if (timeRange === "all") return chartData;
@@ -87,7 +252,7 @@ export default function App() {
   })();
 
   return (
-    <div className="max-w-4xl mx-auto p-6 bg-white shadow-md rounded-lg">
+    <div className="max-w-4xl mx-auto bg-white shadow-md rounded-lg">
       <h1 className="text-2xl font-bold mb-4 px-6 py-4 ">Trade Data</h1>
 
       <div className="flex flex-wrap justify-between items-center px-6 py-4 mb-6">
@@ -113,8 +278,15 @@ export default function App() {
           <ComposedChart data={filteredChartData}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="date" />
-            <YAxis yAxisId="left" label={{ value: "Close Price", angle: -90, position: "insideLeft" }} />
-            <YAxis yAxisId="right" orientation="right" label={{ value: "Volume", angle: -90, position: "insideRight" }} />
+            <YAxis
+              yAxisId="left"
+              label={{ value: "Close Price", angle: -90, position: "insideLeft", fill: "black" }}
+            />
+            <YAxis
+              yAxisId="right"
+              orientation="right"
+              label={{ value: "", angle: -90, position: "insideRight", fill: "black" }}
+            />
             <Tooltip />
             <Legend />
             <Line yAxisId="left" type="monotone" dataKey="close" stroke="#8884d8" />
@@ -123,7 +295,7 @@ export default function App() {
         </ResponsiveContainer>
       </div>
 
-      {/* Price Movement Visualization - Area Chart */}
+
       <div className="mb-8 px-6 py-4">
         <h2 className="text-xl font-semibold mb-2">Price Movement Range</h2>
         <ResponsiveContainer width="100%" height={300}>
@@ -140,15 +312,254 @@ export default function App() {
         </ResponsiveContainer>
       </div>
 
-      <div className="px-6 py-4 border-t border-gray-100">
+      <div className="px-6 py-4 border-t border-gray-100 flex justify-between">
         <button
           onClick={handleReset}
           className="mb-4 px-4 py-2 bg-blue-500 text-white rounded shadow hover:bg-blue-700"
         >
           Reset Trades
         </button>
+
+        <button
+          onClick={() => setIsAddingTrade(true)}
+          className="mb-4 px-4 py-2 bg-green-500 text-white rounded shadow hover:bg-green-700"
+        >
+          Add New Trade
+        </button>
       </div>
 
+      {/* Add Trade */}
+      {isAddingTrade && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">Add New Trade</h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Trade Code</label>
+                <input
+                  type="text"
+                  name="trade_code"
+                  value={newTrade.trade_code}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <input
+                  type="date"
+                  name="date"
+                  value={newTrade.date}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Open</label>
+                  <input
+                    type="number"
+                    name="open"
+                    value={newTrade.open}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    step="0.01"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Close</label>
+                  <input
+                    type="number"
+                    name="close"
+                    value={newTrade.close}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    step="0.01"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">High</label>
+                  <input
+                    type="number"
+                    name="high"
+                    value={newTrade.high}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    step="0.01"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Low</label>
+                  <input
+                    type="number"
+                    name="low"
+                    value={newTrade.low}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    step="0.01"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Volume</label>
+                <input
+                  type="text"
+                  name="volume"
+                  value={newTrade.volume}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  placeholder="e.g. 1,292,933"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end space-x-3">
+              <button
+                onClick={() => setIsAddingTrade(false)}
+                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={handleAddTrade}
+                className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
+              >
+                Add Trade
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Trade */}
+      {isEditingTrade && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">Edit Trade</h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Trade Code</label>
+                <input
+                  type="text"
+                  name="trade_code"
+                  value={newTrade.trade_code}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <input
+                  type="date"
+                  name="date"
+                  value={newTrade.date}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Open</label>
+                  <input
+                    type="number"
+                    name="open"
+                    value={newTrade.open}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    step="0.01"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Close</label>
+                  <input
+                    type="number"
+                    name="close"
+                    value={newTrade.close}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    step="0.01"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">High</label>
+                  <input
+                    type="number"
+                    name="high"
+                    value={newTrade.high}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    step="0.01"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Low</label>
+                  <input
+                    type="number"
+                    name="low"
+                    value={newTrade.low}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    step="0.01"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Volume</label>
+                <input
+                  type="text"
+                  name="volume"
+                  value={newTrade.volume}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  placeholder="e.g. 1,292,933"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setIsEditingTrade(false);
+                  setEditingTradeId(null);
+                }}
+                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={handleUpdateTrade}
+                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+              >
+                Update Trade
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
@@ -195,14 +606,22 @@ export default function App() {
                         {trade.close}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-700">{trade.volume.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-sm text-gray-700">{trade.volume}</td>
                     <td className="px-6 py-4 text-sm font-medium">
-                      <button
-                        className="bg-red-500 text-white rounded shadow hover:bg-red-700 transition-colors py-1 w-full"
-                        onClick={() => handleDelete(trade.trade_code, trade.date)}
-                      >
-                        Delete
-                      </button>
+                      <div className="flex space-x-2">
+                        <button
+                          className="bg-blue-500 text-white rounded shadow hover:bg-blue-700 transition-colors py-1 px-2"
+                          onClick={() => handleEditTrade(trade)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="bg-red-500 text-white rounded shadow hover:bg-red-700 transition-colors py-1 px-2"
+                          onClick={() => handleDelete(trade.trade_code, trade.date)}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
