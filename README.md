@@ -1,12 +1,41 @@
-# React + Vite
+# Stock Data Visualization App
+#### This project is a full-stack web application built with ReactJS (frontend) and Django REST Framework (backend). The application loads stock market data from a JSON file, stores it in an SQL database, and visualizes it in a table with editable rows. Additionally, it includes a multi-axis chart for better insights.
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+### Features
+* ✅ REST API built with Django REST Framework (DRF)
+* ✅ CRUD operations for stock data
+* ✅ Frontend built with ReactJS
+* ✅ Interactive table with editable rows
+* ✅ Line & bar chart for data visualization
+* ✅ Dropdown filter for selecting trade codes
+* ✅ Fast data loading optimization
+* ✅ Deployment-ready
 
-Currently, two official plugins are available:
+### Tech Stack
+* Backend (Python + Django REST Framework)
+* Django
+* Django REST Framework
+* PostgreSQL / SQLite (depending on setup)
+* Virtual environment (venv)
+* Frontend (ReactJS)
+* React.js
+* Tailwind CSS (for styling)
+* Recharts (for charts)
+* Axios (for API calls)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
 
-## Expanding the ESLint configuration
+### Challenges Faced & Learnings
+#### Challenges
+* Handling large datasets in React while keeping the UI smooth
+* Optimizing API calls to prevent slow loading
+* Ensuring proper database indexing for fast queries
+* Integrating multi-axis charts for better visualization
+#### What I Learned
+* Using Django REST Framework for scalable APIs
+* Improving React performance with optimized rendering
+* Implementing CRUD functionalities efficiently
+* Deploying full-stack applications
 
-If you are developing a production application, we recommend using TypeScript and enable type-aware lint rules. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+
+#### Live Link: https://stock-visualizer-ten.vercel.app/
+#### Backend Repository: https://github.com/Tahsin005/Stock-Visualizer-API
